@@ -1,0 +1,151 @@
+Parameters:
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+  
+  VpcCIDR:
+    Type: String
+    Default: "10.0.0.0/16"
+
+  SubnetCIDR:
+    Type: String
+    Default: "10.0.0.0/24"
+
+  IGWCIDR:
+    Type: String
+    Default: "0.0.0.0/0"
+
+  ImageId:
+    Type: String
+    Default: "ami-02e136e904f3da870"
+
+
+Resources:
+  # Create a VPC
+  DemoVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCIDR
+      EnableDnsHostnames: true                       # This indicates whether the instances launched in the VPC get a DNS Hostnames
+      EnableDnsSupport: true
+      InstanceTenancy: default
+      Tags:
+        - Key: Name
+          Value: Demo VPC
+
+# Create an IGW
+
+  DemoInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    DependsOn: DemoVPC
+    Properties:
+      Tags:
+        - Key: Name
+          Value: Demo IGW
+
+
+# Attach The IGW to the VPC
+
+  GatewayAttachToDemoVPC:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref DemoInternetGateway
+      VpcId: !Ref DemoVPC
+
+# Create Public Subnet 
+
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: us-east-1a
+      CidrBlock: !Ref SubnetCIDR
+      MapPublicIpOnLaunch: true 
+      VpcId: !Ref DemoVPC
+      Tags:
+        - Key: Name
+          Value: Public Subnet
+
+# Create a Public Subnet Route Table
+
+  PublicSubnetRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref DemoVPC
+      Tags:
+        - Key: Name
+          Value: Public Subnet Route Table
+
+# Create Route to the IGW 
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: GatewayAttachToDemoVPC
+    Properties:
+      RouteTableId: !Ref PublicSubnetRouteTable
+      DestinationCidrBlock: !Ref IGWCIDR
+      GatewayId: !Ref DemoInternetGateway
+
+# Associate the Public Subnet Route with public subnet
+
+  PublicSubnetWithPublicSubnetRouteTable:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicSubnetRouteTable
+      SubnetId: !Ref PublicSubnet
+
+# Create an EC2 Instance  ami-02e136e904f3da870
+
+  MyDemoEC2Instance:
+    Type: AWS::EC2::Instance
+    Properties: 
+      ImageId: !Ref ImageId
+      KeyName: !Ref KeyName
+      SecurityGroupIds:
+        - !Ref SSHandHTTPSecurityGroup
+      SubnetId: !Ref PublicSubnet
+      InstanceType: "t2.micro"
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          yum -y update
+          yum -y install httpd
+          systemctl start httpd
+          systemctl enable httpd
+          echo "<html><h1>Hello From Iteam University</h1></html>" > /var/www/html/index.html      
+      Tags:
+      - Key: Name
+        Value: Demo Instance
+
+
+# Create a Security Group
+
+  SSHandHTTPSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable Access via ports 22 and 80
+      SecurityGroupIngress:
+      # SSH Rule
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+      # HTTP Rule
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      VpcId: !Ref DemoVPC
+      Tags:
+        - Key: Name
+          Value: Demo Security Group
+
+    
+     
+  
+
+
+
+
+
+
+
+  
